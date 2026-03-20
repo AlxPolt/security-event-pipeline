@@ -1,0 +1,247 @@
+name: event_handling
+
+networks:
+  deltaflare_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${INTERNAL_SUBNET}
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.name: "eventhandling0"
+    labels:
+      com.eventhandling.network.type: "internal"
+
+volumes:
+  nats-data:
+    driver: local
+  influxdb-data:
+    driver: local
+
+services:
+  nats:
+    image: nats:2.12.4-alpine
+    container_name: nats
+    hostname: nats
+    command: -js -c /etc/nats/nats.conf
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+      - ${HOST_NATS_CONFIG}:/etc/nats/nats.conf:ro
+      - nats-data:/data/jetstream
+    networks:
+      - deltaflare_net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:3-core
+    container_name: influxdb
+    hostname: influxdb
+    command:
+      - influxdb3
+      - serve
+      - --node-id=alx-node
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3
+      - --tls-cert=${CONT_CERTS_DIR}/${SERVER_CERT}
+      - --tls-key=${CONT_CERTS_DIR}/${SERVER_KEY}
+      - --admin-token-file=${CONT_CERTS_DIR}/admin-token.json
+      - --disable-authz=health,ping
+    ports:
+      - "127.0.0.1:8181:8181"
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+      - influxdb-data:/var/lib/influxdb3
+    networks:
+      - deltaflare_net
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:8181/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  daemon:
+    build:
+      context: ..
+      dockerfile: deployments/daemon.Dockerfile
+    image: events-daemon:latest
+    container_name: daemon
+    environment:
+      NATS_URL: tls://${NATS_USER}:${NATS_PASSWORD}@nats:4222
+      NATS_USER: ${NATS_USER}
+      NATS_PASSWORD: ${NATS_PASSWORD}
+      NATS_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+      NATS_TLS_CERT: ${CONT_CERTS_DIR}/${CLIENT_CERT}
+      NATS_TLS_KEY: ${CONT_CERTS_DIR}/${CLIENT_KEY}
+      DAEMON_PUBLISH_SUBJECT: ${NATS_SUBJECT}
+      DAEMON_STREAM_NAME: ${NATS_STREAM}
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+    networks:
+      - deltaflare_net
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+    user: "65532:65532"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  writer:
+    build:
+      context: ..
+      dockerfile: deployments/writer.Dockerfile
+    image: events-writer:latest
+    container_name: writer
+    environment:
+      NATS_URL: tls://${NATS_USER}:${NATS_PASSWORD}@nats:4222
+      NATS_USER: ${NATS_USER}
+      NATS_PASSWORD: ${NATS_PASSWORD}
+      NATS_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+      NATS_TLS_CERT: ${CONT_CERTS_DIR}/${CLIENT_CERT}
+      NATS_TLS_KEY: ${CONT_CERTS_DIR}/${CLIENT_KEY}
+      WRITER_SUBSCRIBE_SUBJECT: ${NATS_SUBJECT}
+      WRITER_STREAM_NAME: ${NATS_STREAM}
+      INFLUX_URL: https://influxdb:8181
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_DB_EVENTS: ${INFLUX_DB_EVENTS}
+      INFLUX_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+    networks:
+      - deltaflare_net
+    depends_on:
+      nats:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+    user: "65532:65532"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  reader:
+    build:
+      context: ..
+      dockerfile: deployments/reader.Dockerfile
+    image: events-reader:latest
+    container_name: reader
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      NATS_URL: tls://${NATS_USER}:${NATS_PASSWORD}@nats:4222
+      INFLUX_URL: https://influxdb:8181
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_DB_EVENTS: ${INFLUX_DB_EVENTS}
+      INFLUX_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+      NATS_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+      NATS_TLS_CERT: ${CONT_CERTS_DIR}/${CLIENT_CERT}
+      NATS_TLS_KEY: ${CONT_CERTS_DIR}/${CLIENT_KEY}
+      NATS_USER: ${NATS_USER}
+      NATS_PASSWORD: ${NATS_PASSWORD}
+      READER_QUERY_SUBJECT: ${READER_QUERY_SUBJECT}
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+    networks:
+      - deltaflare_net
+    depends_on:
+      nats:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+    user: "65532:65532"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  client:
+    build:
+      context: ..
+      dockerfile: deployments/client.Dockerfile
+    
+    image: events-client:latest
+    container_name: client
+    restart: "no"
+    
+    depends_on:
+      reader:
+        condition: service_healthy
+    
+    environment:
+      NATS_URL: tls://${NATS_USER}:${NATS_PASSWORD}@nats:4222
+      NATS_CA_CERT: ${CONT_CERTS_DIR}/${CA_FILE}
+      NATS_TLS_CERT: ${CONT_CERTS_DIR}/${CLIENT_CERT}
+      NATS_TLS_KEY: ${CONT_CERTS_DIR}/${CLIENT_KEY}
+      NATS_USER: ${NATS_USER}
+      NATS_PASSWORD: ${NATS_PASSWORD}
+      CLIENT_QUERY_SUBJECT: ${CLIENT_QUERY_SUBJECT}
+      X_CLIENT_MIN_CRITICALITY: ${X_CLIENT_MIN_CRITICALITY}
+      CLIENT_EVENT_LIMIT: ${CLIENT_EVENT_LIMIT}
+      CLIENT_REQUEST_TIMEOUT: ${CLIENT_REQUEST_TIMEOUT}
+    
+    volumes:
+      - ${HOST_CERTS_DIR}:${CONT_CERTS_DIR}:ro
+    networks:
+      - deltaflare_net
+    
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+        reservations:
+          cpus: "0.10"
+          memory: 32M
+    
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+    
+    cap_drop:
+      - ALL
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    user: "65532:65532"
+    

@@ -1,0 +1,128 @@
+basePath: /api/v1
+definitions:
+  adapters.errorResponse:
+    properties:
+      code:
+        type: integer
+      error:
+        type: string
+    type: object
+  domain.EventResult:
+    properties:
+      criticality:
+        type: integer
+      eventMessage:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  domain.QueryParams:
+    properties:
+      limit:
+        description: Limit caps the number of results returned.
+        type: integer
+      minCriticality:
+        description: MinCriticality filters events to those with criticality >= this
+          value.
+        type: integer
+      since:
+        description: Since restricts events to those after this time. Zero means no
+          restriction.
+        type: string
+    type: object
+  domain.QueryResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/domain.EventResult'
+        type: array
+      query:
+        $ref: '#/definitions/domain.QueryParams'
+      total:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: security@example.com
+    name: Platform Security Team
+  description: Real-time security event query API backed by InfluxDB v3
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://example.com/terms/
+  title: EventSys Reader API
+  version: "1.0"
+paths:
+  /events:
+    get:
+      consumes:
+      - application/json
+      description: Returns filtered security events from InfluxDB
+      parameters:
+      - description: Minimum criticality (1-10)
+        in: query
+        maximum: 10
+        minimum: 1
+        name: criticality
+        required: true
+        type: integer
+      - description: Maximum number of results (1-1000)
+        in: query
+        maximum: 1000
+        minimum: 1
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.QueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/adapters.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/adapters.errorResponse'
+      summary: Query security events
+      tags:
+      - events
+  /health:
+    get:
+      description: Returns service health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /ready:
+    get:
+      description: Returns whether the service is ready to accept traffic
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Readiness check
+      tags:
+      - health
+schemes:
+- https
+- http
+swagger: "2.0"
