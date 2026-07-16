@@ -1,0 +1,28 @@
+# Certificates — generate with scripts/certs.sh
+deployments/certs/
+
+# Environment files with secrets — copy .env.example and fill in values
+deployments/.env
+
+# Stale CSR and config files left by older cert scripts
+certs/*.key
+certs/*.csr
+
+# Go build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# macOS metadata
+.DS_Store
+
+# IDE
+.vscode/

@@ -1,0 +1,203 @@
+package docs
+
+import "github.com/swaggo/swag"
+
+const docTemplate = `{
+    "schemes": {{ marshal .Schemes }},
+    "swagger": "2.0",
+    "info": {
+        "description": "{{escape .Description}}",
+        "title": "{{.Title}}",
+        "termsOfService": "http://example.com/terms/",
+        "contact": {
+            "name": "Platform Security Team",
+            "email": "security@example.com"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "{{.Version}}"
+    },
+    "host": "{{.Host}}",
+    "basePath": "{{.BasePath}}",
+    "paths": {
+        "/events": {
+            "get": {
+                "description": "Returns filtered security events from InfluxDB",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Query security events",
+                "parameters": [
+                    {
+                        "maximum": 10,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Minimum criticality (1-10)",
+                        "name": "criticality",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Maximum number of results (1-1000)",
+                        "name": "limit",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.QueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/adapters.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/adapters.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "Returns service health status",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "description": "Returns whether the service is ready to accept traffic",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "adapters.errorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.EventResult": {
+            "type": "object",
+            "properties": {
+                "criticality": {
+                    "type": "integer"
+                },
+                "eventMessage": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.QueryParams": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "description": "Limit caps the number of results returned.",
+                    "type": "integer"
+                },
+                "minCriticality": {
+                    "description": "MinCriticality filters events to those with criticality \u003e= this value.",
+                    "type": "integer"
+                },
+                "since": {
+                    "description": "Since restricts events to those after this time. Zero means no restriction.",
+                    "type": "string"
+                }
+            }
+        },
+        "domain.QueryResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.EventResult"
+                    }
+                },
+                "query": {
+                    "$ref": "#/definitions/domain.QueryParams"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        }
+    }
+}`
+
+var SwaggerInfo = &swag.Spec{
+	Version:          "1.0",
+	Host:             "localhost:8080",
+	BasePath:         "/api/v1",
+	Schemes:          []string{"https", "http"},
+	Title:            "EventSys Reader API",
+	Description:      "Real-time security event query API backed by InfluxDB v3",
+	InfoInstanceName: "swagger",
+	SwaggerTemplate:  docTemplate,
+}
+
+func init() {
+	swag.Register(SwaggerInfo.InstanceName(), SwaggerInfo)
+}

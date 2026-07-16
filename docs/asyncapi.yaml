@@ -1,0 +1,144 @@
+asyncapi: 3.1.0
+info:
+  title: EventSys Messaging API
+  version: 1.0.0
+  description: NATS JetStream async messaging for security event pipeline
+  contact:
+    name: Platform Security Team
+    email: security@example.com
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+servers:
+  production:
+    host: 'nats:4222'
+    protocol: nats
+    description: NATS JetStream (mTLS)
+    security:
+      - $ref: '#/components/securitySchemes/mtls'
+channels:
+  securityEvents:
+    address: events_subject
+    description: 'JetStream stream — daemon publishes, writer consumes'
+    messages:
+      SecurityEvent:
+        $ref: '#/components/messages/SecurityEvent'
+  queryRequest:
+    address: events_subject.query
+    description: 'Request/Reply — client sends query, reader replies'
+    messages:
+      QueryRequest:
+        $ref: '#/components/messages/QueryRequest'
+      QueryResponse:
+        $ref: '#/components/messages/QueryResponse'
+operations:
+  publishSecurityEvent:
+    action: send
+    channel:
+      $ref: '#/channels/securityEvents'
+    summary: Daemon publishes security events to JetStream
+    messages:
+      - $ref: '#/channels/securityEvents/messages/SecurityEvent'
+  consumeSecurityEvent:
+    action: receive
+    channel:
+      $ref: '#/channels/securityEvents'
+    summary: Writer consumes security events from JetStream
+    messages:
+      - $ref: '#/channels/securityEvents/messages/SecurityEvent'
+  sendQueryRequest:
+    action: send
+    channel:
+      $ref: '#/channels/queryRequest'
+    summary: Client sends a query request
+    messages:
+      - $ref: '#/channels/queryRequest/messages/QueryRequest'
+  receiveQueryResponse:
+    action: receive
+    channel:
+      $ref: '#/channels/queryRequest'
+    summary: Client receives query results
+    messages:
+      - $ref: '#/channels/queryRequest/messages/QueryResponse'
+components:
+  messages:
+    SecurityEvent:
+      name: SecurityEvent
+      title: Security Event
+      summary: A security event emitted by the daemon
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SecurityEventPayload'
+    QueryRequest:
+      name: QueryRequest
+      title: Event Query Request
+      summary: Request to query stored security events
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/QueryRequestPayload'
+    QueryResponse:
+      name: QueryResponse
+      title: Event Query Response
+      summary: Query results returned by the reader
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/QueryResponsePayload'
+  schemas:
+    SecurityEventPayload:
+      type: object
+      required:
+        - criticality
+        - timestamp
+        - eventMessage
+      properties:
+        criticality:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 7
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-06-20T10:00:00.000000000Z'
+        eventMessage:
+          type: string
+          maxLength: 500
+          example: Unauthorized login attempt detected
+    QueryRequestPayload:
+      type: object
+      required:
+        - min_criticality
+        - limit
+      properties:
+        min_criticality:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 5
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          example: 10
+    QueryResponsePayload:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              criticality:
+                type: integer
+              eventMessage:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+        total:
+          type: integer
+          example: 42
+  securitySchemes:
+    mtls:
+      type: X509
+      description: Mutual TLS — client and server certificates required
