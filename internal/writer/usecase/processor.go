@@ -72,7 +72,7 @@ func NewEventProcessor(repo ports.EventRepository, retry RetryPolicy, log Logger
 	}
 }
 
-// sanitise → validate → save (with retry).
+// validate → sanitize → save (with retry).
 func (p *EventProcessor) Handle(ctx context.Context, event domain.Event) error {
 	
 	if err := event.Validate(); err != nil {

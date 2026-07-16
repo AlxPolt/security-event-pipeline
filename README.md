@@ -219,11 +219,11 @@ Raw NATS bytes
 json.Unmarshal          ← malformed JSON → msg.Nak()
       │
       ▼
-event.Sanitize()        ← trim whitespace, collapse spaces, clamp criticality
+event.Validate()        ← RFC3339Nano timestamp · message non-empty · length ≤ 1000
       │
       ▼
-event.Validate()        ← criticality ∈ [1,10] · RFC3339Nano timestamp
-      │                    message non-empty · length ≤ 1000
+event.Sanitize()        ← trim whitespace, collapse spaces, clamp criticality to [1,10]
+      │
       ▼
 repository.Save()       ← parameterised WritePoints (no string interpolation)
 ```

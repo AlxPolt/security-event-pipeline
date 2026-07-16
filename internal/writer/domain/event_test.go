@@ -10,29 +10,16 @@ import (
 
 // Event.Validate
 
+// Criticality is corrected by Sanitize() (clamped to [1,10]), not rejected by
+// Validate() — out-of-range values must not cause validation to fail, since
+// Validate() runs before Sanitize() in the usecase pipeline.
 func TestEvent_Validate_Criticality(t *testing.T) {
 	validTS := time.Now().UTC().Format(time.RFC3339)
 
-	cases := []struct {
-		criticality int
-		wantErr     bool
-	}{
-		{0, true},
-		{1, false}, // lower bound
-		{5, false},
-		{10, false}, // upper bound
-		{11, true},
-		{-1, true},
-	}
-
-	for _, tc := range cases {
-		e := domain.Event{Criticality: tc.criticality, Timestamp: validTS, EventMessage: "test"}
-		err := e.Validate()
-		if tc.wantErr && err == nil {
-			t.Errorf("criticality=%d: expected error, got nil", tc.criticality)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("criticality=%d: unexpected error: %v", tc.criticality, err)
+	for _, c := range []int{-1, 0, 1, 5, 10, 11, 99} {
+		e := domain.Event{Criticality: c, Timestamp: validTS, EventMessage: "test"}
+		if err := e.Validate(); err != nil {
+			t.Errorf("criticality=%d: unexpected error: %v", c, err)
 		}
 	}
 }

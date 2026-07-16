@@ -13,12 +13,11 @@ type Event struct {
 	EventMessage string
 }
 
+// Criticality is intentionally not checked here: out-of-range values are
+// auto-corrected by Sanitize(), which runs after Validate() in the usecase
+// pipeline (see EventProcessor.Handle), not rejected as invalid.
 func (e Event) Validate() error {
 	var errs []string
-
-	if e.Criticality < 1 || e.Criticality > 10 {
-		errs = append(errs, fmt.Sprintf("criticality %d is out of range [1-10], will be clamped", e.Criticality))
-	}
 
 	if _, err := time.Parse(time.RFC3339, e.Timestamp); err != nil {
 		errs = append(errs, fmt.Sprintf("invalid timestamp format: %s", err))
